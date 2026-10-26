@@ -143,6 +143,26 @@ code { font-family: var(--f-mono); font-size: .92em; }
   header, .drop, .summary, .tablebox, .foot, details { background: var(--glass-strong); border-color: var(--muted); }
 }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } .drop.over { transform: none; } }
+
+/* Pop-up después de descargar */
+.scrim { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center;
+  padding: max(16px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) max(16px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px));
+  background: rgba(10, 14, 28, 0.35); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+  opacity: 0; transition: opacity .25s ease; }
+.scrim.show { opacity: 1; }
+.coca { width: min(560px, 100%); background: var(--glass-strong); -webkit-backdrop-filter: blur(40px) saturate(180%);
+  backdrop-filter: blur(40px) saturate(180%); border: 1px solid var(--glass-edge); box-shadow: var(--glass-shadow), 0 40px 90px -30px rgba(0,0,0,.55);
+  border-radius: 28px; padding: 34px 28px 26px; display: flex; flex-direction: column; align-items: center; gap: 18px; text-align: center;
+  transform: scale(.88); filter: blur(8px); transition: transform .45s cubic-bezier(.2,1.25,.4,1), filter .3s ease; }
+.scrim.show .coca { transform: scale(1); filter: blur(0); }
+.lata { width: 84px; height: auto; animation: brindis 1.6s ease-in-out .4s 2; transform-origin: 50% 90%; }
+@keyframes brindis { 0%,100% { transform: rotate(0); } 25% { transform: rotate(-9deg); } 75% { transform: rotate(9deg); } }
+.coca h2 { margin: 0; font: 800 clamp(34px, 8vw, 58px)/1.02 var(--f-display); letter-spacing: -0.035em; text-wrap: balance; }
+.coca h2 span { color: #e8202a; }
+.coca p { margin: 0; color: var(--muted); font-size: 15px; }
+.coca .actions { margin-top: 4px; }
+@media (prefers-reduced-motion: reduce) { .coca { transform: none; filter: none; } .lata { animation: none; } }
+@media (prefers-reduced-transparency: reduce) { .coca { -webkit-backdrop-filter: none; backdrop-filter: none; } }
 </style>
 
 <div class="wrap">
@@ -207,6 +227,22 @@ $843.90</div></td><td class="num">843.90</td><td class="num">0.00</td><td class=
       <li>El CSV va ordenado por fecha y se abre con acentos correctos en Excel y Numbers.</li>
     </ul>
   </details>
+</div>
+
+<div class="scrim" id="popCoca" hidden role="dialog" aria-modal="true" aria-labelledby="cocaTitulo">
+  <div class="coca">
+    <svg class="lata" viewBox="0 0 80 130" aria-hidden="true">
+      <defs><linearGradient id="lataBrillo" x1="0" x2="1"><stop offset="0" stop-color="#2b2b2e"/><stop offset=".35" stop-color="#55555b"/><stop offset=".6" stop-color="#1c1c1f"/><stop offset="1" stop-color="#0d0d0f"/></linearGradient></defs>
+      <rect x="10" y="12" width="60" height="108" rx="12" fill="url(#lataBrillo)"/>
+      <rect x="14" y="6" width="52" height="10" rx="4" fill="#b8bcc4"/>
+      <rect x="10" y="48" width="60" height="26" fill="#e8202a"/>
+      <text x="40" y="66" text-anchor="middle" font-family="-apple-system, system-ui, sans-serif" font-weight="800" font-size="14" fill="#ffffff" letter-spacing="1">ZERO</text>
+      <circle cx="58" cy="30" r="2.4" fill="#ffffff" opacity=".55"/><circle cx="22" cy="96" r="1.8" fill="#ffffff" opacity=".4"/><circle cx="54" cy="104" r="1.4" fill="#ffffff" opacity=".45"/>
+    </svg>
+    <h2 id="cocaTitulo">Me debes una <span>coca zero</span>, amor.</h2>
+    <p>Tu CSV ya está listo.</p>
+    <div class="actions"><button class="primary" id="btnCoca" type="button">Va, te la debo</button></div>
+  </div>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
@@ -520,7 +556,7 @@ if (typeof module !== "undefined") module.exports = { extraerXML, extraerMeta, e
     dl.textContent = "";
     const downloads = await descargasP;
     if (downloads) {
-      try { await downloads.save({ filename: nombre, data: csv }); dl.textContent = "CSV guardado."; }
+      try { await downloads.save({ filename: nombre, data: csv }); dl.textContent = "CSV guardado."; mostrarCoca(); }
       catch (e) { dl.textContent = e?.code === "declined" ? "Descarga cancelada." : "No se pudo guardar el archivo aquí."; }
       return;
     }
@@ -528,7 +564,7 @@ if (typeof module !== "undefined") module.exports = { extraerXML, extraerMeta, e
     const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
     const a = document.createElement("a"); a.href = url; a.download = nombre; document.body.append(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 2000);
-    dl.textContent = "CSV descargado.";
+    dl.textContent = "CSV descargado."; mostrarCoca();
   }
 
   function reiniciar() {
@@ -536,6 +572,22 @@ if (typeof module !== "undefined") module.exports = { extraerXML, extraerMeta, e
     $("rows").replaceChildren(); pintar(); $("btnCSV").disabled = true; $("btnReset").hidden = true;
     setStatus(""); $("dlStatus").textContent = "";
   }
+
+  // Pop-up de la coca zero
+  function mostrarCoca() {
+    const s = $("popCoca");
+    s.hidden = false;
+    requestAnimationFrame(() => requestAnimationFrame(() => s.classList.add("show")));
+    setTimeout(() => $("btnCoca").focus(), 50);
+  }
+  function cerrarCoca() {
+    const s = $("popCoca");
+    s.classList.remove("show");
+    setTimeout(() => { s.hidden = true; $("btnCSV").focus(); }, 260);
+  }
+  $("btnCoca").onclick = cerrarCoca;
+  $("popCoca").addEventListener("click", (e) => { if (e.target.id === "popCoca") cerrarCoca(); });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("popCoca").hidden) cerrarCoca(); });
 
   $("btnCarpeta").onclick = () => $("inCarpeta").click();
   $("btnArchivos").onclick = () => $("inArchivos").click();
