@@ -1,0 +1,525 @@
+<title>Extractor de Facturas</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Fraunces:opsz,wght@9..144,600&display=swap">
+<style>
+/* Layout: una columna de trabajo — zona de carga, resumen, tabla de vista previa, descarga. */
+:root {
+  --bg: #f3f5f7;
+  --panel: #ffffff;
+  --ink: #16202b;
+  --muted: #5b6876;
+  --line: #d8dee5;
+  --accent: #1f5fa8;
+  --accent-ink: #ffffff;
+  --accent-soft: #e4edf8;
+  --ok: #1f7a4d; --ok-soft: #e2f3ea;
+  --warn: #9a5b00; --warn-soft: #fbefdc;
+  --bad: #b3261e; --bad-soft: #fbe5e3;
+  --meta: #5b3fb0; --meta-soft: #ece7fa;
+  --f-display: "Fraunces", Georgia, serif;
+  --f-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0f151c; --panel: #17202a; --ink: #e6ecf2; --muted: #93a1b0; --line: #2a3644;
+  --accent: #6aa6ea; --accent-ink: #0b1420; --accent-soft: #1b2c42;
+  --ok: #6fd3a0; --ok-soft: #173327; --warn: #f0b860; --warn-soft: #3a2b12;
+  --bad: #f28b82; --bad-soft: #3d1c1a; --meta: #b5a2f5; --meta-soft: #2a2244; color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #0f151c; --panel: #17202a; --ink: #e6ecf2; --muted: #93a1b0; --line: #2a3644;
+  --accent: #6aa6ea; --accent-ink: #0b1420; --accent-soft: #1b2c42;
+  --ok: #6fd3a0; --ok-soft: #173327; --warn: #f0b860; --warn-soft: #3a2b12;
+  --bad: #f28b82; --bad-soft: #3d1c1a; --meta: #b5a2f5; --meta-soft: #2a2244; color-scheme: dark; }
+
+body { background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 15px; line-height: 1.5; }
+.wrap { max-width: 1040px; margin: 0 auto; padding-block: 28px 56px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: flex; flex-direction: column; gap: 22px; }
+
+header { display: flex; flex-direction: column; gap: 6px; }
+.eyebrow { font: 500 12px/1 var(--f-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+h1 { font: 600 clamp(28px, 5vw, 38px)/1.1 var(--f-display); margin: 0; text-wrap: balance; letter-spacing: -.01em; }
+.lede { margin: 0; color: var(--muted); max-width: 62ch; }
+.private { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ok);
+  background: var(--ok-soft); padding: 5px 10px; border-radius: 999px; width: fit-content; }
+.private svg { width: 14px; height: 14px; flex: none; }
+
+.drop { background: var(--panel); border: 1.5px dashed var(--line); border-radius: 14px; padding: 28px 20px;
+  display: flex; flex-direction: column; align-items: center; gap: 14px; text-align: center; transition: border-color .15s, background .15s; }
+.drop.over { border-color: var(--accent); background: var(--accent-soft); }
+.drop h2 { margin: 0; font: 600 18px/1.3 var(--f-body); }
+.drop p { margin: 0; color: var(--muted); font-size: 14px; max-width: 54ch; }
+.kinds { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+.kind { font: 500 12px/1 var(--f-mono); padding: 6px 9px; border-radius: 6px; border: 1px solid var(--line); color: var(--muted); }
+.actions { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
+
+button, .btn { font: 500 14px/1 var(--f-body); border-radius: 9px; padding: 11px 16px; cursor: pointer;
+  border: 1px solid var(--line); background: var(--panel); color: var(--ink); }
+button:hover { border-color: var(--accent); }
+button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+button.primary:hover { filter: brightness(1.08); }
+button:disabled { opacity: .5; cursor: not-allowed; }
+input[type=file] { display: none; }
+
+.status { font: 400 13px/1.4 var(--f-mono); color: var(--muted); min-height: 1.4em; }
+.status.err { color: var(--bad); }
+
+.summary { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.chip { display: inline-flex; gap: 6px; align-items: baseline; padding: 6px 11px; border-radius: 999px; font-size: 13px; }
+.chip b { font: 600 14px/1 var(--f-mono); font-variant-numeric: tabular-nums; }
+.c-cfdi { background: var(--accent-soft); color: var(--accent); }
+.c-meta { background: var(--meta-soft); color: var(--meta); }
+.c-skip { background: var(--warn-soft); color: var(--warn); }
+.c-err { background: var(--bad-soft); color: var(--bad); }
+.grow { flex: 1; }
+.total { font-size: 13px; color: var(--muted); }
+.total b { font: 600 17px/1 var(--f-mono); color: var(--ink); font-variant-numeric: tabular-nums; }
+
+.tablebox { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; overflow-x: auto; }
+.example-tag { font: 500 11px/1 var(--f-mono); letter-spacing: .06em; text-transform: uppercase; color: var(--warn);
+  background: var(--warn-soft); padding: 4px 7px; border-radius: 5px; }
+table { border-collapse: collapse; width: 100%; min-width: 820px; font-size: 13.5px; }
+th { text-align: left; font: 500 11.5px/1 var(--f-mono); letter-spacing: .06em; text-transform: uppercase; color: var(--muted);
+  padding: 12px 12px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+td { padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+tr:last-child td { border-bottom: 0; }
+td.num, th.num { text-align: right; font-family: var(--f-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+td.mono { font-family: var(--f-mono); font-size: 12.5px; white-space: nowrap; }
+td.folio { font-family: var(--f-mono); font-size: 12px; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+td.concept { max-width: 300px; }
+.clamp { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; white-space: pre-line; }
+td.file { font-size: 12px; color: var(--muted); max-width: 180px; overflow-wrap: anywhere; }
+.tag { font: 500 11px/1 var(--f-mono); padding: 4px 6px; border-radius: 5px; white-space: nowrap; }
+.t-cfdi { background: var(--accent-soft); color: var(--accent); }
+.t-meta { background: var(--meta-soft); color: var(--meta); }
+.t-err { background: var(--bad-soft); color: var(--bad); }
+.t-skip { background: var(--warn-soft); color: var(--warn); }
+tbody.example { opacity: .62; }
+
+.foot { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.note { font-size: 13px; color: var(--muted); max-width: 70ch; margin: 0; }
+details { font-size: 14px; color: var(--muted); }
+details summary { cursor: pointer; color: var(--ink); font-weight: 500; }
+details ul { margin: 8px 0 0; padding-left: 20px; display: grid; gap: 4px; }
+
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <span class="eyebrow">CFDI 3.3 · 4.0 · Recibos Meta Ads</span>
+    <h1>Extractor de Facturas</h1>
+    <p class="lede">Carga una carpeta o un ZIP con facturas XML y recibos PDF de Meta. Se revisan todas las subcarpetas y obtienes un CSV con fecha, folio, proveedor, concepto e importes.</p>
+    <span class="private"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="7" width="10" height="7" rx="1.5"/><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2"/></svg>Los archivos se leen en tu navegador. No se suben ni se guardan.</span>
+  </header>
+
+  <section class="drop" id="drop">
+    <h2>Arrastra aquí la carpeta o el ZIP</h2>
+    <p>También puedes soltar varios archivos sueltos. Los PDF que no son recibos de Meta (por ejemplo, la versión impresa de una factura) se ignoran para no duplicar.</p>
+    <div class="kinds"><span class="kind">.xml</span><span class="kind">.pdf Meta</span><span class="kind">.zip</span></div>
+    <div class="actions">
+      <button class="primary" id="btnCarpeta" type="button">Elegir carpeta</button>
+      <button id="btnArchivos" type="button">Elegir ZIP o archivos</button>
+    </div>
+    <input type="file" id="inCarpeta" webkitdirectory directory multiple>
+    <input type="file" id="inArchivos" multiple accept=".zip,.xml,.pdf,application/zip,application/pdf,text/xml">
+    <div class="status" id="status" role="status" aria-live="polite"></div>
+  </section>
+
+  <section class="summary" id="summary">
+    <span class="example-tag" id="exTag">Vista de ejemplo</span>
+    <span class="chip c-cfdi"><b id="nCfdi">2</b> facturas CFDI</span>
+    <span class="chip c-meta"><b id="nMeta">1</b> recibos Meta</span>
+    <span class="chip c-skip" id="chipDup" hidden><b id="nDup">0</b> duplicados omitidos</span>
+    <span class="chip c-err" id="chipErr" hidden><b id="nErr">0</b> con error</span>
+    <span class="grow"></span>
+    <span class="total">Total <b id="sumTotal">$2,183.06</b></span>
+  </section>
+
+  <div class="tablebox">
+    <table>
+      <thead><tr>
+        <th>Fecha</th><th>Folio</th><th>Proveedor</th><th>Concepto</th>
+        <th class="num">Subtotal</th><th class="num">Impuestos</th><th class="num">Total</th><th>Tipo</th><th>Archivo</th>
+      </tr></thead>
+      <tbody id="rows" class="example">
+        <tr><td class="mono">2026-05-19</td><td class="folio">962EF0C1-…</td><td>Proveedor de ejemplo S.A.</td><td class="concept"><div class="clamp">LAMINA PVC 6 MM</div></td><td class="num">353.45</td><td class="num">56.55</td><td class="num">410.00</td><td><span class="tag t-cfdi">CFDI</span></td><td class="file">ejemplo-1.xml</td></tr>
+        <tr><td class="mono">2026-06-18</td><td class="folio">DF0CE7A2-…</td><td>Impresiones de ejemplo</td><td class="concept"><div class="clamp">IMPRESION DTF UV (+2 más)</div></td><td class="num">801.00</td><td class="num">108.00</td><td class="num">929.16</td><td><span class="tag t-cfdi">CFDI</span></td><td class="file">ejemplo-2.xml</td></tr>
+        <tr><td class="mono">2026-07-15</td><td class="folio">XXXXXXXX</td><td>META</td><td class="concept"><div class="clamp">CAMPAÑA DE EJEMPLO
+De 6 jul. 2026 a 15 jul. 2026
+$843.90</div></td><td class="num">843.90</td><td class="num">0.00</td><td class="num">843.90</td><td><span class="tag t-meta">Meta</span></td><td class="file">recibo-ejemplo.pdf</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="foot">
+    <button class="primary" id="btnCSV" type="button" disabled>Descargar CSV</button>
+    <button id="btnReset" type="button" hidden>Empezar de nuevo</button>
+    <span class="status" id="dlStatus"></span>
+  </div>
+
+  <details>
+    <summary>Qué se extrae de cada archivo</summary>
+    <ul>
+      <li><b>Facturas CFDI (XML):</b> fecha, folio fiscal (UUID), nombre del emisor, primer concepto, subtotal, IVA trasladado total, total y RFC.</li>
+      <li><b>Recibos de Meta (PDF):</b> fecha del comprobante de pago, número de referencia, monto pagado y el bloque completo de campañas como concepto.</li>
+      <li>Los montos se convierten al formato mexicano: <code>1.427,07</code> pasa a <code>1427.07</code>.</li>
+      <li>El CSV va ordenado por fecha y se abre con acentos correctos en Excel y Numbers.</li>
+    </ul>
+  </details>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"></script>
+<script>
+/* ===== Lógica de extracción (sin interfaz). Todo corre en el navegador. ===== */
+const COLUMNAS = ["Fecha", "Folio", "Proveedor", "Concepto", "Subtotal", "Impuestos", "Total", "RFC Emisor", "Archivo"];
+
+/* ---------- CFDI (XML) ---------- */
+const kids = (el) => el ? Array.from(el.childNodes).filter(n => n.nodeType === 1) : [];
+const hijo = (el, nombre) => kids(el).find(n => n.localName === nombre) || null;
+const buscar = (el, nombre) => el.getElementsByTagNameNS("*", nombre)[0] || null;
+function attr(el, nombre, def = null) {
+  if (!el) return def;
+  const n = nombre.toLowerCase();
+  for (const a of Array.from(el.attributes)) if (a.name.toLowerCase() === n) return a.value;
+  return def;
+}
+const num = (v) => { const x = parseFloat(v); return isNaN(x) ? 0 : Math.round(x * 100) / 100; };
+
+function extraerXML(texto, archivo, parser) {
+  try {
+    const doc = parser.parseFromString(texto.replace(/^﻿/, ""), "application/xml");
+    const root = doc.documentElement;
+    if (!root || root.localName === "parsererror" || doc.getElementsByTagName("parsererror").length)
+      return { Concepto: "Error: el XML está dañado", Archivo: archivo };
+    if (root.localName !== "Comprobante")
+      return { Concepto: "No es un CFDI (se omitió)", Archivo: archivo };
+
+    const emisor = hijo(root, "Emisor");
+    const timbre = buscar(root, "TimbreFiscalDigital");
+
+    // Impuestos trasladados globales (no los de cada concepto)
+    const impGlobal = hijo(root, "Impuestos");
+    let impuestos = attr(impGlobal, "TotalImpuestosTrasladados");
+    if (impuestos === null && impGlobal) {
+      impuestos = kids(hijo(impGlobal, "Traslados")).reduce((s, t) => s + num(attr(t, "Importe")), 0);
+    }
+
+    const conceptos = kids(hijo(root, "Conceptos")).filter(c => c.localName === "Concepto");
+    let concepto = "N/A";
+    if (conceptos.length) {
+      concepto = attr(conceptos[0], "Descripcion", "N/A");
+      if (conceptos.length > 1) concepto += ` (+${conceptos.length - 1} más)`;
+    }
+
+    return {
+      Fecha: (attr(root, "Fecha", "") || "").split("T")[0],
+      Folio: attr(timbre, "UUID", "No encontrado"),
+      Proveedor: attr(emisor, "Nombre") || attr(emisor, "Rfc", "No encontrado"),
+      Concepto: concepto,
+      Subtotal: num(attr(root, "SubTotal")),
+      Impuestos: num(impuestos),
+      Total: num(attr(root, "Total")),
+      "RFC Emisor": attr(emisor, "Rfc", "No encontrado"),
+      Archivo: archivo,
+    };
+  } catch (e) {
+    return { Concepto: "Error: " + e.message, Archivo: archivo };
+  }
+}
+
+/* ---------- Recibos de Meta (PDF) ---------- */
+const MESES = { ene: 1, jan: 1, feb: 2, mar: 3, abr: 4, apr: 4, may: 5, jun: 6, jul: 7, ago: 8, aug: 8,
+  sep: 9, sept: 9, oct: 10, nov: 11, dic: 12, dec: 12 };
+
+// '$1.427,07' / '$1,427.07' / '$100,71' -> número con punto decimal
+function normalizarMonto(texto) {
+  let s = String(texto || "").replace(/[^\d.,]/g, "");
+  if (!s) return 0;
+  if (s.includes(",") && s.includes(".")) {
+    s = s.lastIndexOf(",") > s.lastIndexOf(".") ? s.replace(/\./g, "").replace(",", ".") : s.replace(/,/g, "");
+  } else if (s.includes(",")) {
+    s = /,\d{2}$/.test(s) ? s.replace(/\./g, "").replace(",", ".") : s.replace(/,/g, "");
+  } else if ((s.match(/\./g) || []).length > 1 || /\.\d{3}$/.test(s)) {
+    s = s.replace(/\./g, "");
+  }
+  return num(s);
+}
+
+const fmtMX = (n) => n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const formatoMX = (t) => t.replace(/\$\s?[\d.,]*\d/g, (m) => "$" + fmtMX(normalizarMonto(m)));
+
+function fechaMeta(t) {
+  let dia, mes, anio, m;
+  if ((m = t.match(/(\d{1,2})\s+([A-Za-zé]{3,4})\.?\s+(\d{4})/))) [, dia, mes, anio] = m;
+  else if ((m = t.match(/([A-Za-z]{3,4})\.?\s+(\d{1,2}),?\s+(\d{4})/))) [, mes, dia, anio] = m;
+  else return t.trim();
+  const k = mes.toLowerCase();
+  const nm = MESES[k.slice(0, 4)] || MESES[k.slice(0, 3)];
+  if (!nm) return t.trim();
+  return `${anio}-${String(nm).padStart(2, "0")}-${String(dia).padStart(2, "0")}`;
+}
+
+const esReciboMeta = (t) => t.includes("Meta Platforms") || t.includes("FBADS-");
+
+function extraerMeta(texto, archivo) {
+  const lineas = texto.split("\n").map(l => l.trim()).filter(Boolean);
+  // Busca, en las 3 líneas siguientes a una etiqueta, la primera que cumpla el patrón
+  const despues = (etiquetas, patron) => {
+    const i = lineas.findIndex(l => etiquetas.some(e => l.toLowerCase().startsWith(e.toLowerCase())));
+    if (i < 0) return "";
+    for (const l of lineas.slice(i + 1, i + 4)) { const m = l.match(patron); if (m) return m[0]; }
+    return "";
+  };
+
+  const fecha = fechaMeta(despues(
+    ["Fecha de nota de pago", "Fecha del comprobante", "Invoice/Payment Date", "Payment date"],
+    /\d{1,2}\s+[A-Za-zé]{3,4}\.?\s+\d{4}|[A-Za-z]{3,4}\.?\s+\d{1,2},?\s+\d{4}/));
+
+  const m = texto.match(/(?:N[úu]mero de referencia|Reference Number)\s*:\s*(\S+)/i);
+  const referencia = m ? m[1] : "No encontrado";
+
+  const montoTxt = despues(["Pagado", "Paid"], /\$\s?[\d.,]*\d/) || (texto.match(/\$\s?[\d.,]*\d/) || [""])[0];
+  const monto = normalizarMonto(montoTxt);
+
+  const ini = lineas.findIndex(l => l === "Campañas" || l === "Campaigns");
+  let fin = lineas.findIndex(l => l.startsWith("Meta Platforms"));
+  if (fin < 0) fin = lineas.length;
+  const concepto = ini >= 0 ? lineas.slice(ini + 1, fin).map(formatoMX).join("\n") : "Campañas no encontradas";
+
+  return {
+    Fecha: fecha, Folio: referencia, Proveedor: "META", Concepto: concepto,
+    Subtotal: monto, Impuestos: 0, Total: monto, "RFC Emisor": "Extranjero", Archivo: archivo,
+  };
+}
+
+// Texto del PDF en el orden del documento, una línea por renglón
+async function textoPDF(pdfjsLib, datos) {
+  const pdf = await pdfjsLib.getDocument({ data: datos, isEvalSupported: false, disableFontFace: true, verbosity: 0 }).promise;
+  let out = "";
+  for (let p = 1; p <= pdf.numPages; p++) {
+    const { items } = await (await pdf.getPage(p)).getTextContent();
+    let lastY = null;
+    for (const it of items) {
+      const y = it.transform ? it.transform[5] : lastY;
+      if (lastY !== null && y !== null && Math.abs(y - lastY) > 2 && !out.endsWith("\n")) out += "\n";
+      else if (it.str && out && !/[\s]$/.test(out)) out += " ";
+      out += it.str;
+      if (it.hasEOL && !out.endsWith("\n")) out += "\n";
+      if (it.str) lastY = y;
+    }
+    out += "\n";
+  }
+  await pdf.destroy();
+  return out.replace(/[ \t]+\n/g, "\n");
+}
+
+/* ---------- CSV ---------- */
+function aCSV(filas) {
+  const esc = (v) => {
+    if (v === undefined || v === null) return "";
+    const s = String(v);
+    return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  };
+  return "﻿" + [COLUMNAS.join(","), ...filas.map(f => COLUMNAS.map(c => esc(f[c])).join(","))].join("\r\n");
+}
+
+function ordenar(filas) {
+  return filas.slice().sort((a, b) => {
+    if (!a.Fecha) return 1; if (!b.Fecha) return -1;
+    return a.Fecha < b.Fecha ? -1 : a.Fecha > b.Fecha ? 1 : 0;
+  });
+}
+
+if (typeof module !== "undefined") module.exports = { extraerXML, extraerMeta, esReciboMeta, textoPDF, normalizarMonto, aCSV, ordenar, COLUMNAS };
+
+</script>
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const parser = new DOMParser();
+  let filas = [];
+  let duplicados = 0;
+  // Dentro de Claude se usa el guardado del visor; fuera de Claude, una descarga normal
+  const descargasP = window.claude?.use ? window.claude.use("downloads").catch(() => null) : Promise.resolve(null);
+
+  if (window.pdfjsLib) {
+    // El worker ya está cargado como script: pdf.js lo usa en la misma página.
+    try { pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"; } catch (e) {}
+  }
+
+  const ext = (n) => (n.split(".").pop() || "").toLowerCase();
+  const base = (n) => n.split("/").pop();
+  const oculto = (n) => n.split("/").some(p => p.startsWith(".") || p === "__MACOSX");
+
+  // Cada entrada: { nombre, leer(tipo) } donde tipo es "text" | "uint8array"
+  function deFile(f, ruta) {
+    return { nombre: ruta || f.webkitRelativePath || f.name,
+      leer: (t) => t === "text" ? f.text() : f.arrayBuffer().then(b => new Uint8Array(b)) };
+  }
+
+  async function expandir(entradas) {
+    const out = [];
+    for (const e of entradas) {
+      if (oculto(e.nombre)) continue;
+      const x = ext(e.nombre);
+      if (x === "zip") {
+        try {
+          const zip = await JSZip.loadAsync(await e.leer("uint8array"));
+          const internas = [];
+          zip.forEach((ruta, z) => { if (!z.dir) internas.push({ nombre: e.nombre + "/" + ruta,
+            leer: (t) => z.async(t === "text" ? "string" : "uint8array") }); });
+          out.push(...await expandir(internas));
+        } catch (err) {
+          out.push({ nombre: e.nombre, error: "No se pudo abrir el ZIP" });
+        }
+      } else if (x === "xml" || x === "pdf") out.push(e);
+    }
+    return out;
+  }
+
+  // Arrastrar carpetas: recorre el árbol completo
+  async function leerArbol(entry, ruta = "") {
+    if (entry.isFile) return [await new Promise((ok, ko) => entry.file(f => ok(deFile(f, ruta + f.name)), ko))];
+    if (!entry.isDirectory) return [];
+    const reader = entry.createReader();
+    const hijos = [];
+    for (;;) {
+      const lote = await new Promise((ok, ko) => reader.readEntries(ok, ko));
+      if (!lote.length) break;
+      hijos.push(...lote);
+    }
+    const out = [];
+    for (const h of hijos) out.push(...await leerArbol(h, ruta + entry.name + "/"));
+    return out;
+  }
+
+  const setStatus = (t, err = false) => { $("status").textContent = t; $("status").classList.toggle("err", err); };
+  const money = (n) => "$" + fmtMX(n || 0);
+
+  async function procesar(entradas) {
+    const archivos = await expandir(entradas);
+    if (!archivos.length) {
+      setStatus("No encontré archivos XML, PDF ni ZIP en lo que cargaste.", true);
+      return;
+    }
+    const nuevas = [];
+    let i = 0;
+    for (const a of archivos) {
+      i++;
+      setStatus(`Leyendo ${i} de ${archivos.length}: ${base(a.nombre)}`);
+      if (a.error) { nuevas.push({ Concepto: "Error: " + a.error, Archivo: base(a.nombre), _tipo: "err" }); continue; }
+      try {
+        if (ext(a.nombre) === "xml") {
+          const f = extraerXML(await a.leer("text"), base(a.nombre), parser);
+          f._tipo = f.Folio ? "cfdi" : (f.Concepto || "").startsWith("No es un CFDI") ? "skip" : "err";
+          if (f._tipo !== "skip") nuevas.push(f);
+        } else {
+          if (!window.pdfjsLib) throw new Error("no se cargó el lector de PDF");
+          const texto = await textoPDF(pdfjsLib, await a.leer("uint8array"));
+          if (!esReciboMeta(texto)) continue;
+          const f = extraerMeta(texto, base(a.nombre)); f._tipo = "meta"; nuevas.push(f);
+        }
+      } catch (err) {
+        nuevas.push({ Concepto: "Error: " + err.message, Archivo: base(a.nombre), _tipo: "err" });
+      }
+    }
+    // Sin duplicados (mismo folio y proveedor), útil si el XML viene en la carpeta y en un ZIP
+    const vistos = new Set(filas.filter(f => f.Folio).map(f => f.Proveedor + "|" + f.Folio));
+    for (const f of nuevas) {
+      const k = f.Folio ? f.Proveedor + "|" + f.Folio : null;
+      if (k && vistos.has(k)) { duplicados++; continue; }
+      if (k) vistos.add(k);
+      filas.push(f);
+    }
+    filas = ordenar(filas);
+    pintar();
+    setStatus(`Listo: ${archivos.length} archivo(s) revisados.`);
+  }
+
+  function celda(tag, txt, cls) { const td = document.createElement(tag); if (cls) td.className = cls; td.textContent = txt ?? ""; return td; }
+
+  function pintar() {
+    const tb = $("rows");
+    tb.classList.remove("example");
+    $("exTag").hidden = true;
+    tb.replaceChildren();
+    for (const f of filas) {
+      const tr = document.createElement("tr");
+      tr.append(celda("td", f.Fecha, "mono"));
+      const fo = celda("td", f.Folio, "folio"); fo.title = f.Folio || ""; tr.append(fo);
+      tr.append(celda("td", f.Proveedor));
+      const c = celda("td", "", "concept"); const d = celda("div", f.Concepto, "clamp"); d.title = f.Concepto || ""; c.append(d); tr.append(c);
+      const ok = f._tipo !== "err";
+      tr.append(celda("td", ok ? fmtMX(f.Subtotal) : "", "num"));
+      tr.append(celda("td", ok ? fmtMX(f.Impuestos) : "", "num"));
+      tr.append(celda("td", ok ? fmtMX(f.Total) : "", "num"));
+      const t = celda("td", ""); const s = document.createElement("span");
+      s.className = "tag t-" + f._tipo; s.textContent = { cfdi: "CFDI", meta: "Meta", err: "Error" }[f._tipo] || "";
+      t.append(s); tr.append(t);
+      tr.append(celda("td", f.Archivo, "file"));
+      tb.append(tr);
+    }
+    const n = (t) => filas.filter(f => f._tipo === t).length;
+    $("nCfdi").textContent = n("cfdi");
+    $("nMeta").textContent = n("meta");
+    $("nErr").textContent = n("err"); $("chipErr").hidden = !n("err");
+    $("nDup").textContent = duplicados; $("chipDup").hidden = !duplicados;
+    $("sumTotal").textContent = money(filas.filter(f => f._tipo !== "err").reduce((s, f) => s + (f.Total || 0), 0));
+    $("btnCSV").disabled = !filas.length;
+    $("btnReset").hidden = !filas.length;
+  }
+
+  async function descargar() {
+    const csv = aCSV(filas);
+    const hoy = new Date(); const p = (x) => String(x).padStart(2, "0");
+    const nombre = `facturas-${hoy.getFullYear()}-${p(hoy.getMonth() + 1)}-${p(hoy.getDate())}.csv`;
+    const dl = $("dlStatus");
+    dl.textContent = "";
+    const downloads = await descargasP;
+    if (downloads) {
+      try { await downloads.save({ filename: nombre, data: csv }); dl.textContent = "CSV guardado."; }
+      catch (e) { dl.textContent = e?.code === "declined" ? "Descarga cancelada." : "No se pudo guardar el archivo aquí."; }
+      return;
+    }
+    // Fuera de Claude (por ejemplo en GitHub Pages): descarga normal
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+    const a = document.createElement("a"); a.href = url; a.download = nombre; document.body.append(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+    dl.textContent = "CSV descargado.";
+  }
+
+  function reiniciar() {
+    filas = []; duplicados = 0;
+    $("rows").replaceChildren(); pintar(); $("btnCSV").disabled = true; $("btnReset").hidden = true;
+    setStatus(""); $("dlStatus").textContent = "";
+  }
+
+  $("btnCarpeta").onclick = () => $("inCarpeta").click();
+  $("btnArchivos").onclick = () => $("inArchivos").click();
+  for (const id of ["inCarpeta", "inArchivos"]) {
+    $(id).onchange = (ev) => { const fs = Array.from(ev.target.files).map(f => deFile(f)); ev.target.value = ""; procesar(fs); };
+  }
+  $("btnCSV").onclick = descargar;
+  $("btnReset").onclick = reiniciar;
+
+  const drop = $("drop");
+  ["dragenter", "dragover"].forEach(t => drop.addEventListener(t, (e) => { e.preventDefault(); drop.classList.add("over"); }));
+  ["dragleave", "drop"].forEach(t => drop.addEventListener(t, () => drop.classList.remove("over")));
+  drop.addEventListener("drop", async (e) => {
+    e.preventDefault();
+    const items = Array.from(e.dataTransfer.items || []);
+    const entries = items.map(it => it.webkitGetAsEntry && it.webkitGetAsEntry()).filter(Boolean);
+    let entradas = [];
+    if (entries.length) { for (const en of entries) entradas.push(...await leerArbol(en)); }
+    else entradas = Array.from(e.dataTransfer.files).map(f => deFile(f));
+    procesar(entradas);
+  });
+  window.addEventListener("dragover", (e) => e.preventDefault());
+  window.addEventListener("drop", (e) => e.preventDefault());
+})();
+</script>
