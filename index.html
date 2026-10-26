@@ -1,6 +1,15 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>html{color-scheme:light}body{margin:0}img{max-width:100%}</style>
+</head>
+<body>
 <title>Extractor de Facturas</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <style>
+[hidden] { display: none !important; }
 /* Layout: paneles de vidrio independientes (nunca vidrio sobre vidrio) flotando sobre un fondo tipo wallpaper de macOS. */
 :root {
   --wall-1: #7fb3ff; --wall-2: #c69cff; --wall-3: #7fe0d0; --wall-4: #ffb8c9; --wall-base: #dfe6f3;
@@ -148,8 +157,8 @@ code { font-family: var(--f-mono); font-size: .92em; }
 .scrim { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center;
   padding: max(16px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) max(16px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px));
   background: rgba(10, 14, 28, 0.35); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
-  opacity: 0; transition: opacity .25s ease; }
-.scrim.show { opacity: 1; }
+  opacity: 0; pointer-events: none; transition: opacity .25s ease; }
+.scrim.show { opacity: 1; pointer-events: auto; }
 .coca { width: min(560px, 100%); background: var(--glass-strong); -webkit-backdrop-filter: blur(40px) saturate(180%);
   backdrop-filter: blur(40px) saturate(180%); border: 1px solid var(--glass-edge); box-shadow: var(--glass-shadow), 0 40px 90px -30px rgba(0,0,0,.55);
   border-radius: 28px; padding: 34px 28px 26px; display: flex; flex-direction: column; align-items: center; gap: 18px; text-align: center;
@@ -613,3 +622,6 @@ if (typeof module !== "undefined") module.exports = { extraerXML, extraerMeta, e
   window.addEventListener("drop", (e) => e.preventDefault());
 })();
 </script>
+
+</body>
+</html>
